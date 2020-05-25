@@ -1,12 +1,12 @@
 TODO
 ----
 
-* write README, add LICENSE
 * use https://crates.io/crates/clightningrpc
 * more metrics, correct names/labels
 * tests
 * allocate port number 9393
 * provide Grafana dashboard
+* write README
 
 Links
 -----
