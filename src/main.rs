@@ -25,7 +25,6 @@ fn setup_logging(config: &config::Config) -> Result<()> {
     Ok(())
 }
 
-//#[tokio::main(max_threads = 1, core_threads = 1)]
 fn main() -> Result<()> {
     let c: config::Config = config::Config::parse();
 
@@ -33,7 +32,10 @@ fn main() -> Result<()> {
 
     let mut rt = runtime::Runtime::new()?;
     rt.block_on(async {
-        server::run_server(&c).await.unwrap(); //XXX
+        if let Err(e) = server::run_server(&c).await {
+            log::error!("Error: {:#}", e);
+            panic!();
+        }
     });
 
     Ok(())
