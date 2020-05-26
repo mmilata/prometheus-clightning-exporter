@@ -128,7 +128,7 @@ async fn producer_loop(
         };
         log::trace!("Producer: sending result");
 
-        if let Err(_) = tx.send(to_send) {
+        if tx.send(to_send).is_err() {
             log::error!("Producer: no receivers");
         }
         log::trace!("Producer: sleeping");
