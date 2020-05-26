@@ -1,8 +1,28 @@
+**Work in progress. Current choice of metrics is likely useless.**
+
+```
+Prometheus exporter for monitoring c-lightning node
+
+USAGE:
+    prometheus-clightning-exporter [FLAGS] [OPTIONS] --rpc-socket <PATH>
+
+FLAGS:
+    -v, --verbose              Enable debug log messages
+    -T, --no-log-timestamps    Do not prepend timestamps to log output
+    -h, --help                 Prints help information
+    -V, --version              Prints version information
+
+OPTIONS:
+    -s, --rpc-socket <PATH>       Path to lightning-rpc socket
+    -l, --listen <ADDR:PORT>      Address:port on which to expose metrics [default: 127.0.0.1:9393]
+    -r, --rate-limit <SECONDS>    Minimal period between lightningd scrapes [default: 1]
+    -t, --timeout <SECONDS>       Timeout for socket operations [default: 5]
+```
+
 TODO
 ----
 
-* use https://crates.io/crates/clightningrpc
-* more metrics, correct names/labels
+* actual useful metrics, correct names/labels
 * tests
 * allocate port number 9393
 * provide Grafana dashboard

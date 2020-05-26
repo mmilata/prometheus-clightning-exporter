@@ -3,30 +3,26 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
+use tokio::net::UnixStream;
 use tokio::sync::broadcast;
 use tokio::sync::Notify;
 use tokio::time::{delay_until, timeout, Instant};
+use tokio_util::compat::Tokio02AsyncReadCompatExt;
 
-use crate::rpc_client::RpcClient;
+use clightningrpc::aio::LightningRPC;
+use clightningrpc::responses::{GetInfo, ListFunds};
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct GetInfoResult {
-    pub id: Option<String>,
-    pub alias: Option<String>,
-    pub network: Option<String>,
-    pub version: Option<String>,
-    pub blockheight: Option<u32>,
-    pub num_peers: Option<u32>,
-    pub num_pending_channels: Option<u32>,
-    pub num_active_channels: Option<u32>,
-    pub num_inactive_channels: Option<u32>,
+#[derive(Clone, Debug)]
+pub struct LightningMetrics {
+    pub getinfo: GetInfo,
+    pub listfunds: ListFunds,
+    pub num_nodes: u64,
+    pub num_channels: u64,
 }
 
 #[derive(Clone)]
 pub struct MetricsProducer {
-    rx_factory: broadcast::Sender<Result<GetInfoResult, Error>>,
+    rx_factory: broadcast::Sender<Result<LightningMetrics, Error>>,
     notifier: Arc<Notify>,
 }
 
@@ -52,7 +48,7 @@ impl std::error::Error for Error {
 }
 
 impl MetricsProducer {
-    pub async fn recv(self) -> Result<GetInfoResult, Error> {
+    pub async fn recv(self) -> Result<LightningMetrics, Error> {
         let mut rx = self.rx_factory.subscribe();
         self.notifier.notify();
 
@@ -63,7 +59,7 @@ impl MetricsProducer {
                 Err(broadcast::RecvError::Closed) => {
                     // Shouldn't happen because we keep a sender as "rx_factory" in the server.
                     log::error!("Producer closed channel!");
-                    return Err(Error::FatalError)
+                    return Err(Error::FatalError);
                 }
                 Err(broadcast::RecvError::Lagged(_)) => {
                     log::error!("Lagged channel!");
@@ -124,15 +120,21 @@ impl MetricsProducer {
     }
 }
 
-async fn do_rpc(socket_path: &Path) -> Result<GetInfoResult, anyhow::Error> {
-    let mut c = RpcClient::new(socket_path)
+async fn do_rpc(socket_path: &Path) -> Result<LightningMetrics, anyhow::Error> {
+    let stream = UnixStream::connect(socket_path)
         .await
         .context(format!("Connecting to {:?}", socket_path))?;
-    let res = c
-        .call("getinfo", json!([]))
-        .await
-        .context("Calling getinfo")?;
-    let parsed: GetInfoResult = serde_json::from_value(res).context("Parsing response JSON")?;
+    let mut c = LightningRPC::new(stream.compat());
+    let gi = c.getinfo().await.context("Calling getinfo")?;
+    let lf = c.listfunds().await.context("Calling listfunds")?;
+    // listnodes(None) and listchannels(None) are super expensive
+    let ln = c.listnodes(None).await.context("Calling listnodes")?;
+    let lc = c.listchannels(None).await.context("Calling listchannels")?;
 
-    Ok(parsed)
+    Ok(LightningMetrics {
+        getinfo: gi,
+        listfunds: lf,
+        num_nodes: ln.nodes.len() as u64,
+        num_channels: lc.channels.len() as u64,
+    })
 }
