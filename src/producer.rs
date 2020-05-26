@@ -26,9 +26,14 @@ pub struct MetricsProducer {
     notifier: Arc<Notify>,
 }
 
+/// Indicates why the producer did not send any metrics.
+/// The details are intentionally not provided in order not to leak them to the http output. We
+/// need to write them to log here.
 #[derive(Debug, Clone)]
 pub enum Error {
+    /// Communication with lightning daemon failed. Tell Prometheus it is down.
     RpcError,
+    /// Unexpected condition occurred. Return 500 internal server error.
     FatalError,
 }
 
@@ -77,46 +82,57 @@ impl MetricsProducer {
         timeout_duration: Duration,
     ) -> anyhow::Result<MetricsProducer> {
         log::trace!("Producer: spawning");
-        let (tx, _rx) = broadcast::channel(1);
-        let rx_factory = tx.clone();
+        let (b_tx, _rx) = broadcast::channel(1);
 
-        let n_tx = Arc::new(Notify::new());
-        let n_rx = n_tx.clone();
-        let pb = PathBuf::from(socket_path);
+        let notifier = Arc::new(Notify::new());
 
-        tokio::spawn(async move {
-            loop {
-                log::trace!("Producer: waiting for notification");
-                n_rx.notified().await;
-                log::trace!("Producer: woken up");
-
-                let started = Instant::now();
-                let to_send = match timeout(timeout_duration, do_rpc(&pb)).await {
-                    Ok(Ok(r)) => Ok(r),
-                    Ok(Err(e)) => {
-                        log::error!("RPC error: {:#}", e);
-                        Err(Error::RpcError)
-                    }
-                    Err(_) => {
-                        log::error!("RPC timed out: {:?}", timeout_duration);
-                        Err(Error::RpcError)
-                    }
-                };
-                log::trace!("Producer: sending result");
-
-                if let Err(_) = tx.send(to_send) {
-                    log::error!("Producer: no receivers");
-                }
-                log::trace!("Producer: sleeping");
-                delay_until(started + min_period).await;
-            }
-        });
+        tokio::spawn(producer_loop(
+            notifier.clone(),
+            b_tx.clone(),
+            PathBuf::from(socket_path),
+            min_period,
+            timeout_duration,
+        ));
 
         log::trace!("Producer: spawned");
         Ok(MetricsProducer {
-            rx_factory: rx_factory,
-            notifier: n_tx,
+            rx_factory: b_tx,
+            notifier: notifier,
         })
+    }
+}
+
+async fn producer_loop(
+    notifier: Arc<Notify>,
+    tx: broadcast::Sender<Result<LightningMetrics, Error>>,
+    socket_path: PathBuf,
+    min_period: Duration,
+    timeout_duration: Duration,
+) {
+    loop {
+        log::trace!("Producer: waiting for notification");
+        notifier.notified().await;
+        log::trace!("Producer: woken up");
+
+        let started = Instant::now();
+        let to_send = match timeout(timeout_duration, do_rpc(&socket_path)).await {
+            Ok(Ok(r)) => Ok(r),
+            Ok(Err(e)) => {
+                log::error!("RPC error: {:#}", e);
+                Err(Error::RpcError)
+            }
+            Err(_) => {
+                log::error!("RPC timed out: {:?}", timeout_duration);
+                Err(Error::RpcError)
+            }
+        };
+        log::trace!("Producer: sending result");
+
+        if let Err(_) = tx.send(to_send) {
+            log::error!("Producer: no receivers");
+        }
+        log::trace!("Producer: sleeping");
+        delay_until(started + min_period).await;
     }
 }
 
