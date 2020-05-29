@@ -1,4 +1,4 @@
-**Work in progress. Current choice of metrics is likely useless.**
+**Use the official exporter plugin instead: https://github.com/lightningd/plugins/tree/master/prometheus**
 
 ```
 Prometheus exporter for monitoring c-lightning node
@@ -18,15 +18,6 @@ OPTIONS:
     -r, --rate-limit <SECONDS>    Minimal period between lightningd scrapes [default: 1]
     -t, --timeout <SECONDS>       Timeout for socket operations [default: 5]
 ```
-
-TODO
-----
-
-* actual useful metrics, correct names/labels
-* tests
-* allocate port number 9393
-* provide Grafana dashboard
-* write README
 
 Links
 -----

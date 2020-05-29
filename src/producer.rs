@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
+use std::vec::Vec;
 
 use anyhow::Context;
 use tokio::net::UnixStream;
@@ -10,14 +11,13 @@ use tokio::time::{delay_until, timeout, Instant};
 use tokio_util::compat::Tokio02AsyncReadCompatExt;
 
 use clightningrpc::aio::LightningRPC;
-use clightningrpc::responses::{GetInfo, ListFunds};
+use clightningrpc::responses::{GetInfo, ListFunds, Peer};
 
 #[derive(Clone, Debug)]
 pub struct LightningMetrics {
     pub getinfo: GetInfo,
     pub listfunds: ListFunds,
-    pub num_nodes: u64,
-    pub num_channels: u64,
+    pub listpeers: Vec<Peer>,
 }
 
 #[derive(Clone)]
@@ -143,14 +143,15 @@ async fn do_rpc(socket_path: &Path) -> Result<LightningMetrics, anyhow::Error> {
     let mut c = LightningRPC::new(stream.compat());
     let gi = c.getinfo().await.context("Calling getinfo")?;
     let lf = c.listfunds().await.context("Calling listfunds")?;
-    // listnodes(None) and listchannels(None) are super expensive
-    let ln = c.listnodes(None).await.context("Calling listnodes")?;
-    let lc = c.listchannels(None).await.context("Calling listchannels")?;
+    let lp = c
+        .listpeers(None, None)
+        .await
+        .context("Calling listpeers")?
+        .peers;
 
     Ok(LightningMetrics {
         getinfo: gi,
         listfunds: lf,
-        num_nodes: ln.nodes.len() as u64,
-        num_channels: lc.channels.len() as u64,
+        listpeers: lp,
     })
 }
