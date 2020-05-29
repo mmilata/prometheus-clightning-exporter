@@ -5,5 +5,5 @@ rustPlatform.buildRustPackage rec {
   version = "1";
   src = ./.;
 
-  cargoSha256 = "19w0xwizh1rd0pz9dzz8dvckimjcyrmrynl04aak2awnbh5a2mlg";
+  cargoSha256 = "0c627ggimqp2p34m970g6qh5is4d9l49g3ishicw1ik47hryyjs8";
 }
